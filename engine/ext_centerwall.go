@@ -6,15 +6,46 @@ import (
 )
 
 var (
-	DWPos   = NewScalarValue("ext_dwpos", "m", "Position of the simulation window while following a domain wall", GetShiftPos) // TODO: make more accurate
-	DWSpeed = NewScalarValue("ext_dwspeed", "m/s", "Speed of the simulation window while following a domain wall", getShiftSpeed)
+	DWPos = NewGetScalar("ext_dwpos", "m", "Position of the simulation window while following a domain wall", GetShiftPos) // TODO: make more accurate
+	DWPMAXPos = NewGetScalar("ext_PMAdwxpos", "m", "Position of the simulation window while following a domain wall", GetPMAPos)
+	DWXPos = NewGetScalar("ext_dwxpos", "m", "Position of the simulation window while following a domain wall", GetXPos)
 )
 
 func init() {
 	DeclFunc("ext_centerWall", CenterWall, "centerWall(c) shifts m after each step to keep m_c close to zero")
 }
 
+func GetJonathanPos(c int) float64 {
+	mc := M.Comp(c).Average()
+	n := Mesh().Size()
+	cs := Mesh().CellSize()
+	pos := (float64(n[0])*cs[0])/2.*(mc+1)
+	pos += GetShiftPos()
+return float64(pos)
+}
+
+func GetPMAPos() float64 {
+	mc := M.Comp(2).Average()
+	n := Mesh().Size()
+	cs := Mesh().CellSize()
+	pos := (float64(n[0])*cs[0])/2.*(mc+1)
+	pos += GetShiftPos()
+return float64(pos)
+}
+
+func GetXPos() float64 {
+	c :=0
+	M := &M
+	mc := sAverageUniverse(M.Buffer().Comp(c))[0]
+	n := Mesh().Size()
+	cs := Mesh().CellSize()
+	pos := (float64(n[0])*cs[0])/2.*(mc+1)
+	pos += GetShiftPos()
+return float64(pos)
+}
+
 func centerWall(c int) {
+	component =c
 	M := &M
 	mc := sAverageUniverse(M.Buffer().Comp(c))[0]
 	n := Mesh().Size()
@@ -60,13 +91,16 @@ var (
 	lastShift float64 // shift the last time we queried speed
 	lastT     float64 // time the last time we queried speed
 	lastV     float64 // speed the last time we queried speed
+	DWSpeed   = NewGetScalar("ext_dwspeed", "m/s", "Speed of the simulation window while following a domain wall", getShiftSpeed)
+	component  int //the component used in centerwall
 )
 
 func getShiftSpeed() float64 {
-	if lastShift != GetShiftPos() {
-		lastV = (GetShiftPos() - lastShift) / (Time - lastT)
-		lastShift = GetShiftPos()
+	if lastShift != GetJonathanPos(component) {
+		lastV = (GetJonathanPos(component) - lastShift) / (Time - lastT)
+		lastShift = GetJonathanPos(component)
 		lastT = Time
 	}
 	return lastV
 }
+
