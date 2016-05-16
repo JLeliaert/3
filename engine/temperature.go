@@ -5,18 +5,16 @@ import (
 	"github.com/mumax/3/cuda/curand"
 	"github.com/mumax/3/data"
 	"github.com/mumax/3/mag"
-	"github.com/mumax/3/util"
+	"math"
 )
 
 var (
-	Temp        = NewScalarParam("Temp", "K", "Temperature", &temp_red)
-	temp_red    DerivedParam // reduced temperature = (alpha * Temp) / (mu0 * Msat)
-	E_therm     = NewScalarValue("E_therm", "J", "Thermal energy", GetThermalEnergy)
-	Edens_therm = NewScalarField("Edens_therm", "J/m3", "Thermal energy density", AddThermalEnergyDensity)
-	B_therm     thermField // Thermal effective field (T)
+	Temp        ScalarParam  // Temperature in K
+	temp_red    derivedParam // reduced temperature = (alpha * Temp) / (mu0 * Msat)
+	E_therm     *GetScalar   // Thermal energy in J
+	Edens_therm sAdder       // Thermal energy density
+	B_therm     thermField   // Thermal effective field (T)
 )
-
-var AddThermalEnergyDensity = makeEdensAdder(&B_therm, -1)
 
 // thermField calculates and caches thermal noise.
 type thermField struct {
@@ -28,13 +26,16 @@ type thermField struct {
 }
 
 func init() {
+	Temp.init("Temp", "K", "Temperature", []derived{&temp_red})
 	DeclFunc("ThermSeed", ThermSeed, "Set a random seed for thermal noise")
-	registerEnergy(GetThermalEnergy, AddThermalEnergyDensity)
+	E_therm = NewGetScalar("E_therm", "J", "Thermal energy", GetThermalEnergy)
+	Edens_therm.init("Edens_therm", "J/m3", "Thermal energy density", makeEdensAdder(&B_therm, -1))
+	registerEnergy(GetThermalEnergy, Edens_therm.AddTo)
 	B_therm.step = -1 // invalidate noise cache
 	DeclROnly("B_therm", &B_therm, "Thermal field (T)")
 
 	// reduced temperature = (alpha * T) / (mu0 * Msat)
-	temp_red.init(1, []parent{Alpha, Temp, Msat}, func(p *DerivedParam) {
+	temp_red.init(1, []updater{&Alpha, &Temp, &Msat}, func(p *derivedParam) {
 		dst := temp_red.cpu_buf
 		alpha := Alpha.cpuLUT()
 		T := Temp.cpuLUT()
@@ -55,9 +56,9 @@ func (b *thermField) AddTo(dst *data.Slice) {
 func (b *thermField) update() {
 	// we need to fix the time step here because solver will not yet have done it before the first step.
 	// FixDt as an lvalue that sets Dt_si on change might be cleaner.
-	if FixDt != 0 {
-		Dt_si = FixDt
-	}
+	//if FixDt != 0 {
+	//	Dt_si = FixDt
+	//}
 
 	if b.generator == 0 {
 		b.generator = curand.CreateGenerator(curand.PSEUDO_DEFAULT)
@@ -82,8 +83,17 @@ func (b *thermField) update() {
 		return
 	}
 
+	// after a bad step the timestep is rescaled and the noise should be rescaled accordingly
+	if NSteps == b.step && Dt_si != b.dt {
+		for c := 0; c < 3; c++ {
+			cuda.Madd2(b.noise.Comp(c),b.noise.Comp(c), b.noise.Comp(c), float32(math.Sqrt(b.dt/Dt_si)),0.)
+		}
+	b.dt = Dt_si
+		return
+	}
+
 	if FixDt == 0 {
-		util.Fatal("Finite temperature requires fixed time step. Set FixDt != 0.")
+		//util.Fatal("Finite temperature requires fixed time step. Set FixDt != 0.")
 	}
 
 	N := Mesh().NCell()
