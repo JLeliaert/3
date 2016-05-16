@@ -59,3 +59,16 @@ func scale(f *data.Slice, factor float32) {
 		}
 	}
 }
+
+
+func rescale(f *data.Slice) {
+	a := f.Vectors()
+	for i := range a[0] {
+		for j := range a[0][i] {
+			for k := range a[0][i][j] {
+				a[0][i][j][k] *= -1
+				a[1][i][j][k] *= -1
+			}
+		}
+	}
+}

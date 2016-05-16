@@ -70,6 +70,7 @@ var (
 	flag_min       = flag.String("min", "auto", `Minimum of color scale: "auto" or value.`)
 	flag_max       = flag.String("max", "auto", `Maximum of color scale: "auto" or value.`)
 	flag_normalize = flag.Bool("normalize", false, `Normalize vector data to unit length`)
+	flag_rescale = flag.Bool("rescale", false, `Rescale vector data `)
 	flag_normpeak  = flag.Bool("normpeak", false, `Scale vector data, maximum to unit length`)
 	flag_resize    = flag.String("resize", "", "Resize. E.g.: 128x128x4")
 	flag_cropx     = flag.String("xrange", "", "Crop x range min:max (both optional, max=exclusive)")
@@ -311,6 +312,9 @@ func show(f *data.Slice, info data.Meta, out io.Writer) {
 func preprocess(f *data.Slice) {
 	if *flag_normalize {
 		normalize(f, 1)
+	}
+	if *flag_rescale {
+		rescale(f)
 	}
 	if *flag_normpeak {
 		normpeak(f)
